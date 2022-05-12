@@ -10,6 +10,7 @@
 int
 exec(char *path, char **argv)
 {
+//  cprintf("in exec\n");
   char *s, *last;
   int i, off;
   uint argc, sz, sp, ustack[3+MAXARG+1];
@@ -101,8 +102,17 @@ exec(char *path, char **argv)
   curproc->tf->esp = sp;
   switchuvm(curproc);
   freevm(oldpgdir);
-  return 0;
 
+///pro03//////////////////
+	exit_threads(curproc->pid, curproc->tid);
+	
+	curproc->tid = 0;
+	curproc->manager = curproc;
+	curproc->start = 0;
+	curproc->end = 0;
+	curproc->retval = 0;
+////cprintf("exec out");
+	return 0;
  bad:
   if(pgdir)
     freevm(pgdir);

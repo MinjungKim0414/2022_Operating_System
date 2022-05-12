@@ -15,6 +15,8 @@ struct {
 static struct proc *initproc;
 
 int nextpid = 1;
+///pro03
+int nexttid = 1;
 extern void forkret(void);
 extern void trapret(void);
 
@@ -169,6 +171,21 @@ growproc(int n)
     if((sz = deallocuvm(curproc->pgdir, sz, sz + n)) == 0)
       return -1;
   }
+
+///pro03
+  struct proc *p;
+	acquire(&ptable.lock);
+	for(p = ptable.proc; p < &ptable.proc[NPROC]; p++) {
+		if(p->pid == 0)
+			continue;
+		if(p->pid == curproc->pid)
+			p->sz = sz;
+	}
+
+	release(&ptable.lock);
+
+
+
   curproc->sz = sz;
   switchuvm(curproc);
   return 0;
@@ -183,6 +200,8 @@ fork(void)
   int i, pid;
   struct proc *np;
   struct proc *curproc = myproc();
+////pro03
+  struct proc *p;
 
   // Allocate process.
   if((np = allocproc()) == 0){
@@ -196,6 +215,22 @@ fork(void)
     np->state = UNUSED;
     return -1;
   }
+	//if(curproc->tid != 0) {
+		//cprintf("thread making\n");
+		acquire(&ptable.lock);
+		for(p = ptable.proc; p < &ptable.proc[NPROC]; p++) {
+			if(curproc->pid == p->pid && curproc->tid != p->tid) {
+				deallocuvm(np->pgdir, p->sva + 2*PGSIZE, p->sva);
+				np->stacklist[np->end] = p->sva;
+				np->end = (np->end+1) % (NPROC + 1);
+			}
+		}
+		release(&ptable.lock);
+	//}
+	np->sva = curproc->sva;
+
+
+
   np->sz = curproc->sz;
   np->parent = curproc;
   *np->tf = *curproc->tf;
@@ -233,6 +268,26 @@ exit(void)
 
   if(curproc == initproc)
     panic("init exiting");
+
+///pro03//////////////////////////////////
+  acquire(&ptable.lock);
+  for(p = ptable.proc; p < &ptable.proc[NPROC]; p++) {
+//cprintf("pid : %d\n", p->pid);
+//cprintf("tid : %d\n", p->tid);
+  
+    if(p->pid == curproc->pid && p != curproc) {
+//cprintf("cleannnnn\n");
+      kfree(p->kstack);
+      p->kstack = 0;
+      p->pid = 0;
+      p->parent = 0;
+      p->name[0] = 0;
+      p->killed = 0;
+      p->state = UNUSED;
+    }
+  }
+  release(&ptable.lock);
+////////////////////////////////////////////////////////
 
   // Close all open files.
   for(fd = 0; fd < NOFILE; fd++){
@@ -532,3 +587,228 @@ procdump(void)
     cprintf("\n");
   }
 }
+
+
+
+//project03/////////////////////////////////////////////////
+
+int 
+thread_create(thread_t *thread, void *(*start_routine)(void *), void *arg)
+{
+  int i;
+  uint sz, sp, ustack[2];
+  pde_t *pgdir;
+  struct proc *np;
+  struct proc *curproc = myproc();
+
+//cprintf("create\n");
+
+//cprintf("fork here start\n");
+
+  if((np = allocproc()) == 0) {
+    return -1;
+  }
+
+  pgdir = curproc->pgdir;
+  if(pgdir == 0) {
+    np->state = UNUSED;
+    return -1;
+  }
+  np->parent = curproc->parent;
+  *np->tf = *curproc->tf;
+
+  for(i = 0; i < NOFILE; i++) {
+    if(curproc->ofile[i])
+      np->ofile[i] = filedup(curproc->ofile[i]);
+  }
+  np->cwd = idup(curproc->cwd);
+  safestrcpy(np->name, curproc->name, sizeof(curproc->name));
+  acquire(&ptable.lock);
+  np->tf->eax = 0;
+  np->pid = curproc->pid;
+  np->manager = curproc;
+  np->tid = nexttid++;
+  release(&ptable.lock);
+	
+/////////exec/////////////
+
+//cprintf("exec\n");
+
+  if(curproc->start == curproc->end) {
+    sz = curproc->sz;	
+  } else {
+    sz = curproc->stacklist[curproc->start];
+  }
+//cprintf("alloc : %d\n", sz);
+  if((sz = allocuvm(pgdir, sz, sz + 2*PGSIZE)) == 0) {
+    goto bad;
+  }
+//cprintf("error\n");
+  clearpteu(pgdir, (char*)(sz - 2*PGSIZE));
+  sp = sz;
+
+  ustack[0] = 0xffffffff;
+  sp -= 4;
+  ustack[1] = (uint)arg;
+  sp -= 4;
+  if(copyout(pgdir, sp, ustack, 2*4) < 0)
+    goto bad;
+///
+  np->sva = sz - 2*PGSIZE;
+  if(curproc->start == curproc->end) {
+    curproc->sz = sz;
+  } else {
+    curproc->sz = curproc->sz;
+    curproc->start = (curproc->start+1) % (NPROC+1);
+  }
+  np->sz = curproc->sz;
+  np->pgdir = pgdir;
+  np->tf->eip = (uint)start_routine;
+  np->tf->esp = sp;
+
+//cprintf("eip : %d\n", np->tf->eip);
+	
+  
+
+  *thread = np->tid;
+  acquire(&ptable.lock);
+  np->state = RUNNABLE;
+  release(&ptable.lock);
+  
+  return 0;
+
+bad :
+  np->state = UNUSED;
+  return -1;
+//  cprintf("create\n");
+}
+
+void
+thread_exit(void *retval)
+{
+  struct proc *curproc = myproc();
+  int fd;
+
+  if(curproc->tid == 0) {
+    return;
+  }
+
+  curproc->retval = retval;
+
+//cprintf("exit\n");
+
+// exit part
+  for(fd = 0; fd < NOFILE; fd++) {
+    if(curproc->ofile[fd]) {
+      fileclose(curproc->ofile[fd]);
+      curproc->ofile[fd] = 0;
+    }
+  }
+	
+  begin_op();
+  iput(curproc->cwd);
+  end_op();
+  curproc->cwd = 0;
+
+  acquire(&ptable.lock);
+  wakeup1(curproc->manager);
+  curproc->state = ZOMBIE;
+
+  sched();
+  panic("zombie exit");
+///cprintf("exit\n");
+}
+
+int
+thread_join(thread_t thread, void **retval)
+{
+  struct proc *curproc = myproc();
+  struct proc *p;
+  int sva;
+  int havekids;
+
+//retval = curproc->retval;
+
+///cprintf("join\n");
+
+  if(curproc->tid != 0) return -1;
+
+  acquire(&ptable.lock);
+  for(;;){
+    havekids = 0;
+    for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
+      if(p->manager != curproc || p->tid != thread)
+	continue;
+//cprintf("have kids\n");
+      havekids = 1;
+      if(p->state == ZOMBIE){
+//cprintf("zombie\n");
+	kfree(p->kstack);
+	p->kstack = 0;
+	p->pid = 0;
+	p->parent = 0;
+	p->name[0] = 0;
+	p->killed = 0;
+	p->state = UNUSED;
+
+	p->manager = 0;
+	p->tid = 0;
+	sva = p->sva;
+	p->sva = 0;
+
+//cprintf("sva : %d\n", sva);
+	deallocuvm(p->pgdir, sva + 2*PGSIZE, sva);
+
+	*retval = p->retval;
+	release(&ptable.lock);
+	curproc->stacklist[curproc->end] = sva;
+	curproc->end = (curproc->end+1) % (NPROC+1);
+	return 0;
+      }
+    }
+
+    if(!havekids || curproc->killed) {
+      cprintf("error\n");
+      release(&ptable.lock);
+      return -1;
+    }
+//cprintf("sleep\n");
+    sleep(curproc, &ptable.lock);
+  }
+//cprintf("join\n");
+  return 0;
+}
+
+
+void
+exit_threads(int pid, int tid) 
+{
+  struct proc *p;
+		
+  acquire(&ptable.lock);
+  for(p = ptable.proc; p < &ptable.proc[NPROC]; p++) {
+    if(pid == 0)
+      continue;
+    if(p->pid == pid && p->tid != tid) {
+      kfree(p->kstack);
+      p->kstack = 0;
+      p->pid = 0;
+      p->parent = 0;
+      p->name[0] = 0;
+      p->killed = 0;
+      p->state = UNUSED;
+    }
+  }
+  release(&ptable.lock);
+}
+
+
+
+
+
+
+
+
+
+
+
