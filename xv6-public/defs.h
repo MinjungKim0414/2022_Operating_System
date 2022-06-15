@@ -197,7 +197,8 @@ int		thread_join(thread_t thread, void **retval);
 void		exit_threads(int, int);
 
 ///pro04////////////
-int addUser(char*, char*);
-
+int 		addUser(char*, char*);
+int 		deleteUser(char*);
+int 		chmod(char*, int);
 // number of elements in fixed-size array
 #define NELEM(x) (sizeof(x)/sizeof((x)[0]))

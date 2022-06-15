@@ -29,6 +29,8 @@ void thread_exit(void*);
 int thread_join(thread_t, void**);
 void exit_threads(int, int);
 int addUser(char*, char*);
+int deleteUser(char*);
+int chmod(char*, int);
 
 // ulib.c
 int stat(const char*, struct stat*);

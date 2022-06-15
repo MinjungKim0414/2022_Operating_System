@@ -26,3 +26,5 @@
 #define SYS_thread_join   24
 #define SYS_exit_threads  25
 #define SYS_addUser 	  26
+#define SYS_deleteUser    27
+#define SYS_chmod	  28

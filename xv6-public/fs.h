@@ -55,3 +55,11 @@ struct dirent {
   char name[DIRSIZ];
 };
 
+////pro4///////////////
+#define MODE_RUSR	32
+#define MODE_WUSR	16
+#define MODE_XUSR	8
+#define MODE_ROTH	4
+#define MODE_WOTH	2
+#define MODE_XOTH	1
+

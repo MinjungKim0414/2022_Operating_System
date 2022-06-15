@@ -668,3 +668,10 @@ nameiparent(char *path, char *name)
 {
   return namex(path, 1, name);
 }
+
+////pro4//////////////
+int 
+chmod(char *path, int mode)
+{
+	return 0;
+}
