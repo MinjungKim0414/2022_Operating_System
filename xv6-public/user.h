@@ -28,6 +28,7 @@ int thread_create(thread_t*, void*, void*);
 void thread_exit(void*);
 int thread_join(thread_t, void**);
 void exit_threads(int, int);
+int addUser(char*, char*);
 
 // ulib.c
 int stat(const char*, struct stat*);

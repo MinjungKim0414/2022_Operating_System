@@ -25,3 +25,4 @@
 #define SYS_thread_exit   23
 #define SYS_thread_join   24
 #define SYS_exit_threads  25
+#define SYS_addUser 	  26
