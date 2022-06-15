@@ -673,5 +673,24 @@ nameiparent(char *path, char *name)
 int 
 chmod(char *path, int mode)
 {
-	return 0;
+/*
+  struct inode * ip;
+
+  begin_op();
+  ip = namei(path);   //namei() returns the corresponding inode
+  if(ip == 0) {       //no inode found
+    end_op();
+    return -1;
+  }
+
+  //inode found, lock inode and update mode
+  ilock(ip);
+  ip->mode.asInt = mode;
+  iupdate(ip);        //copy to dinode
+  iunlock(ip);
+  iput(ip);           //free ip 
+  end_op();
+ */
+
+  return 0;
 }
